@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "577742085986",
+    "project_id": "cook-cea38",
+    "storage_bucket": "cook-cea38.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:577742085986:android:a303b7eb5f837d26d9163b",
+        "android_client_info": {
+          "package_name": "com.project.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDftGWd1btma2Rz39Gvu3WrspCLLR-ga60"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
