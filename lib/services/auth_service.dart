@@ -6,34 +6,35 @@ import '../pages/login.dart';
 
 class AuthService {
 
-  Future<void> signup({
+  Future<bool> signup({
     required String email,
     required String password,
-    required BuildContext context
+    required BuildContext context,
   }) async {
-
     try {
-
       await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: email,
-          password: password
+        email: email,
+        password: password,
       );
 
-      await Future.delayed(const Duration(seconds: 1));
+      // Chuyển trang nếu đăng ký thành công
       Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-              builder: (BuildContext context) => const HomePages()
-          )
+        context,
+        MaterialPageRoute(
+          builder: (BuildContext context) => const HomePages(),
+        ),
       );
 
-    } on FirebaseAuthException catch(e) {
+      return true; // Thành công
+    } on FirebaseAuthException catch (e) {
       String message = '';
       if (e.code == 'weak-password') {
         message = 'The password provided is too weak.';
       } else if (e.code == 'email-already-in-use') {
         message = 'An account already exists with that email.';
       }
+
+      // Hiển thị thông báo lỗi
       Fluttertoast.showToast(
         msg: message,
         toastLength: Toast.LENGTH_LONG,
@@ -42,12 +43,23 @@ class AuthService {
         textColor: Colors.white,
         fontSize: 14.0,
       );
-    }
-    catch(e){
 
-    }
+      return false; // Thất bại
+    } catch (e) {
+      // Xử lý các lỗi không xác định
+      Fluttertoast.showToast(
+        msg: "An unexpected error occurred.",
+        toastLength: Toast.LENGTH_LONG,
+        gravity: ToastGravity.SNACKBAR,
+        backgroundColor: Colors.black54,
+        textColor: Colors.white,
+        fontSize: 14.0,
+      );
 
+      return false; // Thất bại
+    }
   }
+
 
   Future<void> signin({
     required String email,

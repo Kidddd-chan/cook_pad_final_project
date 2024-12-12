@@ -19,7 +19,7 @@ class _AddDishState extends State<AddDish1> {
   TextEditingController _nameController = TextEditingController();
   TextEditingController _descriptionController = TextEditingController();
 
-  final List<String> categoryItems = ['Ca', 'Muc', 'Bao Ngu', 'Nam'];
+  final List<String> categoryItems = ['Ăn trưa','Ăn tối' ,'Ăn vặt', 'Ăn sáng','Đồ chay'];
 
   // Function to pick an image
   Future<void> getImage() async {
@@ -55,6 +55,14 @@ class _AddDishState extends State<AddDish1> {
 
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text("Món ăn đã được thêm thành công!")));
+
+        // Reset fields after successful upload
+        setState(() {
+          selectedImage = null;
+          _nameController.clear();
+          _descriptionController.clear();
+          value = null;
+        });
       } catch (e) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text("Lỗi khi tải lên: $e")));
@@ -64,7 +72,6 @@ class _AddDishState extends State<AddDish1> {
           SnackBar(content: Text("Vui lòng chọn ảnh và nhập tên món ăn.")));
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -73,7 +80,7 @@ class _AddDishState extends State<AddDish1> {
           onTap: () => Navigator.pop(context),
           child: Icon(Icons.arrow_back_ios_new_outlined),
         ),
-        title: Text('Add Dish'),
+        title: Text('Thêm món ăn'),
       ),
       body: SingleChildScrollView(
         child: Container(
@@ -95,23 +102,23 @@ class _AddDishState extends State<AddDish1> {
                     ),
                     child: selectedImage != null
                         ? kIsWeb
-                            ? FutureBuilder<String>(
-                                future: convertImageToBase64(selectedImage!),
-                                builder: (context, snapshot) {
-                                  if (snapshot.connectionState ==
-                                          ConnectionState.done &&
-                                      snapshot.hasData) {
-                                    return Image.memory(
-                                      base64Decode(snapshot.data!),
-                                      fit: BoxFit.cover,
-                                    );
-                                  } else {
-                                    return CircularProgressIndicator();
-                                  }
-                                },
-                              )
-                            : Image.file(File(selectedImage!.path),
-                                fit: BoxFit.cover)
+                        ? FutureBuilder<String>(
+                      future: convertImageToBase64(selectedImage!),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.done &&
+                            snapshot.hasData) {
+                          return Image.memory(
+                            base64Decode(snapshot.data!),
+                            fit: BoxFit.cover,
+                          );
+                        } else {
+                          return CircularProgressIndicator();
+                        }
+                      },
+                    )
+                        : Image.file(File(selectedImage!.path),
+                        fit: BoxFit.cover)
                         : Icon(Icons.camera_alt_outlined),
                   ),
                 ),
@@ -122,6 +129,7 @@ class _AddDishState extends State<AddDish1> {
                 padding: EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(color: Color(0xFFececf8)),
                 child: TextField(
+                  maxLines: 3,
                   controller: _nameController,
                   decoration: InputDecoration(border: InputBorder.none),
                 ),
@@ -144,15 +152,13 @@ class _AddDishState extends State<AddDish1> {
                 decoration: BoxDecoration(color: Color(0xFFececf8)),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    items: categoryItems
-                        .map((item) => DropdownMenuItem(
-                              value: item,
-                              child: Text(item),
-                            ))
-                        .toList(),
+                    items: categoryItems.map((item) => DropdownMenuItem(
+                      value: item,
+                      child: Text(item),
+                    )).toList(),
                     onChanged: ((value) => setState(() {
-                          this.value = value;
-                        })),
+                      this.value = value;
+                    })),
                     dropdownColor: Colors.white,
                     hint: Text("Chọn mục"),
                     icon: Icon(Icons.arrow_drop_down, color: Colors.black),

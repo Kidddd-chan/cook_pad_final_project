@@ -140,15 +140,27 @@ class Signup extends StatelessWidget {
         elevation: 0,
       ),
       onPressed: () async {
-        await AuthService().signup(
-            email: _emailController.text,
-            password: _passwordController.text,
-            context: context
+        bool isSuccess = await AuthService().signup(
+          email: _emailController.text,
+          password: _passwordController.text,
+          context: context,
         );
+
+        if (isSuccess) {
+          // Chuyển đến trang đăng nhập nếu đăng ký thành công
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => Login()),
+          );
+        } else {
+          // Đăng ký thất bại, thông báo lỗi đã được xử lý trong AuthService
+        }
       },
       child: const Text("Sign Up"),
     );
   }
+
+
 
   Widget _signin(BuildContext context) {
     return Padding(
