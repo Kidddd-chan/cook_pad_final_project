@@ -1,6 +1,37 @@
 import 'package:flutter/material.dart';
-
+import 'package:firebase_database/firebase_database.dart';
 import 'package:fn_prj/pages/see_details_food.dart';
+import 'dart:convert';
+
+class Dish {
+  final String id;
+  final String name;
+  final String category;
+  final String createdAt;
+  final String description;
+  final String imageBase64;
+
+  Dish({
+    required this.id,
+    required this.name,
+    required this.category,
+    required this.createdAt,
+    required this.description,
+    required this.imageBase64,
+  });
+
+  factory Dish.fromSnapshot(DataSnapshot snapshot) {
+    Map<dynamic, dynamic> data = snapshot.value as Map<dynamic, dynamic>;
+    return Dish(
+      id: snapshot.key ?? '',
+      name: data['name'] ?? '',
+      category: data['category'] ?? '',
+      createdAt: data['created_at'] ?? '',
+      description: data['description'] ?? '',
+      imageBase64: data['image_base64'] ?? '',
+    );
+  }
+}
 
 class HomePages extends StatefulWidget {
   const HomePages({super.key});
@@ -10,15 +41,46 @@ class HomePages extends StatefulWidget {
 }
 
 class _HomePagesState extends State<HomePages> {
-  int _selectedIndex = 0; // Track selected tab index
-  final List<Widget> _pages = [
-    HomePages(),
-    // Add more pages here...
-  ];
+  int _selectedIndex = 0;
+  final DatabaseReference _databaseRef = FirebaseDatabase.instance.ref().child('dishes');
 
-  void _onItemTapped(int index) {
+  List<Dish> _dishes = [];
+  List<Dish> _filteredDishes = [];
+
+  final TextEditingController _searchController = TextEditingController();
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDishes();
+  }
+
+  void _fetchDishes() {
     setState(() {
-      _selectedIndex = index;
+      _isLoading = true;
+    });
+
+    _databaseRef.onValue.listen((event) {
+      final data = event.snapshot.children;
+
+      _dishes = data.map((snapshot) {
+        return Dish.fromSnapshot(snapshot);
+      }).toList();
+
+      setState(() {
+        _filteredDishes = _dishes;
+        _isLoading = false;
+      });
+    });
+  }
+
+  void _searchDishes(String query) {
+    setState(() {
+      _filteredDishes = _dishes.where((dish) {
+        return dish.name.toLowerCase().contains(query.toLowerCase()) ||
+            dish.category.toLowerCase().contains(query.toLowerCase());
+      }).toList();
     });
   }
 
@@ -82,12 +144,23 @@ class _HomePagesState extends State<HomePages> {
                             ),
                           ],
                         ),
-                        child: const TextField(
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: _searchDishes,
                           decoration: InputDecoration(
                             border: InputBorder.none,
-                            hintText: 'Search...',
+                            hintText: 'Tìm kiếm...',
                             prefixIcon: Icon(Icons.search),
                             contentPadding: EdgeInsets.symmetric(vertical: 15),
+                            suffixIcon: _searchController.text.isNotEmpty
+                                ? IconButton(
+                              icon: Icon(Icons.clear),
+                              onPressed: () {
+                                _searchController.clear();
+                                _searchDishes('');
+                              },
+                            )
+                                : null,
                           ),
                         ),
                       ),
@@ -113,56 +186,68 @@ class _HomePagesState extends State<HomePages> {
                           ),
                         ],
                       ),
-                      // Adding Grid with overlay text
                       Expanded(
-                        child: GridView.count(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 10,
-                          // mainAxisSpacing: 5,
-                          children: [
-                            GridTile(
+                        child: _isLoading
+                            ? Center(child: CircularProgressIndicator())
+                            : _filteredDishes.isEmpty
+                            ? Center(child: Text("Không tìm thấy kết quả"))
+                            : GridView.builder(
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 10,
+                            childAspectRatio: 0.8,
+                          ),
+                          itemCount: _filteredDishes.length,
+                          itemBuilder: (context, index) {
+                            final dish = _filteredDishes[index];
+                            return GridTile(
                               child: Stack(
                                 children: [
                                   Container(
                                     decoration: BoxDecoration(
-                                      borderRadius:
-                                          BorderRadius.circular(15), // Bo góc
+                                      borderRadius: BorderRadius.circular(15),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black
-                                              .withOpacity(0.2), // Màu bóng
-                                          spreadRadius:
-                                              2, // Độ lan tỏa của bóng
-                                          blurRadius: 8, // Độ mờ của bóng
-                                          offset:
-                                              Offset(0, 4), // Dịch chuyển bóng
+                                          color: Colors.black.withOpacity(0.2),
+                                          spreadRadius: 2,
+                                          blurRadius: 8,
+                                          offset: Offset(0, 4),
                                         ),
                                       ],
                                     ),
                                     child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(
-                                          15), // Bo góc ảnh
-                                      child: Image.network(
-                                        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRo_etEVFHPQdatjflcGiwd6UtnOwPAXL-cRQ&s',
+                                      borderRadius: BorderRadius.circular(15),
+                                      child: dish.imageBase64.isNotEmpty
+                                          ? Image.memory(
+                                        base64Decode(dish.imageBase64),
                                         height: 150,
                                         width: 250,
                                         fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return Container(
+                                            color: Colors.grey,
+                                            child: Center(child: Text('Lỗi tải ảnh')),
+                                          );
+                                        },
+                                      )
+                                          : Container(
+                                        color: Colors.grey,
+                                        child: Center(child: Text('Không có ảnh')),
                                       ),
                                     ),
                                   ),
-                                  const Positioned(
-                                    bottom: 80, // Căn chữ gần sát đáy ảnh
-                                    left: 5, // Căn lề trái
+                                  Positioned(
+                                    bottom: 80,
+                                    left: 5,
                                     child: Text(
-                                      "Thịt Kho Tàu",
+                                      dish.name,
                                       style: TextStyle(
                                         fontSize: 15,
                                         fontWeight: FontWeight.bold,
-                                        color: Colors
-                                            .white70, // Chữ màu trắng để nổi bật
+                                        color: Colors.white70,
                                         shadows: [
                                           Shadow(
-                                            blurRadius: 10.0, // Đổ bóng cho chữ
+                                            blurRadius: 10.0,
                                             color: Colors.black,
                                             offset: Offset(2, 2),
                                           ),
@@ -170,54 +255,19 @@ class _HomePagesState extends State<HomePages> {
                                       ),
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                            GridTile(
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius:
-                                          BorderRadius.circular(15), // Bo góc
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black
-                                              .withOpacity(0.2), // Màu bóng
-                                          spreadRadius:
-                                              2, // Độ lan tỏa của bóng
-                                          blurRadius: 8, // Độ mờ của bóng
-                                          offset:
-                                              Offset(0, 4), // Dịch chuyển bóng
-                                        ),
-                                      ],
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(
-                                          15), // Bo góc ảnh
-                                      child: Image.network(
-                                        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRo_etEVFHPQdatjflcGiwd6UtnOwPAXL-cRQ&s',
-                                        height: 150,
-                                        width: 250,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ),
-                                  const Positioned(
-                                    bottom: 80, // Căn chữ gần sát đáy ảnh
-                                    left: 5, // Căn lề trái
+                                  Positioned(
+                                    bottom: 10,
+                                    left: 5,
                                     child: Text(
-                                      "Thịt Kho Tàu",
+                                      dish.category,
                                       style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors
-                                            .white70, // Chữ màu trắng để nổi bật
+                                        fontSize: 12,
+                                        color: Colors.white70,
                                         shadows: [
                                           Shadow(
-                                            blurRadius: 10.0, // Đổ bóng cho chữ
+                                            blurRadius: 5.0,
                                             color: Colors.black,
-                                            offset: Offset(2, 2),
+                                            offset: Offset(1, 1),
                                           ),
                                         ],
                                       ),
@@ -225,432 +275,8 @@ class _HomePagesState extends State<HomePages> {
                                   ),
                                 ],
                               ),
-                            ),
-                            GridTile(
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius:
-                                          BorderRadius.circular(15), // Bo góc
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black
-                                              .withOpacity(0.2), // Màu bóng
-                                          spreadRadius:
-                                              2, // Độ lan tỏa của bóng
-                                          blurRadius: 8, // Độ mờ của bóng
-                                          offset:
-                                              Offset(0, 4), // Dịch chuyển bóng
-                                        ),
-                                      ],
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(
-                                          15), // Bo góc ảnh
-                                      child: Image.network(
-                                        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRo_etEVFHPQdatjflcGiwd6UtnOwPAXL-cRQ&s',
-                                        height: 150,
-                                        width: 250,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ),
-                                  const Positioned(
-                                    bottom: 80, // Căn chữ gần sát đáy ảnh
-                                    left: 5, // Căn lề trái
-                                    child: Text(
-                                      "Thịt Kho Tàu",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors
-                                            .white70, // Chữ màu trắng để nổi bật
-                                        shadows: [
-                                          Shadow(
-                                            blurRadius: 10.0, // Đổ bóng cho chữ
-                                            color: Colors.black,
-                                            offset: Offset(2, 2),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            GridTile(
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius:
-                                          BorderRadius.circular(15), // Bo góc
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black
-                                              .withOpacity(0.2), // Màu bóng
-                                          spreadRadius:
-                                              2, // Độ lan tỏa của bóng
-                                          blurRadius: 8, // Độ mờ của bóng
-                                          offset:
-                                              Offset(0, 4), // Dịch chuyển bóng
-                                        ),
-                                      ],
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(
-                                          15), // Bo góc ảnh
-                                      child: Image.network(
-                                        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRo_etEVFHPQdatjflcGiwd6UtnOwPAXL-cRQ&s',
-                                        height: 150,
-                                        width: 250,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ),
-                                  const Positioned(
-                                    bottom: 80, // Căn chữ gần sát đáy ảnh
-                                    left: 5, // Căn lề trái
-                                    child: Text(
-                                      "Thịt Kho Tàu",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors
-                                            .white70, // Chữ màu trắng để nổi bật
-                                        shadows: [
-                                          Shadow(
-                                            blurRadius: 10.0, // Đổ bóng cho chữ
-                                            color: Colors.black,
-                                            offset: Offset(2, 2),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            GridTile(
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius:
-                                          BorderRadius.circular(15), // Bo góc
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black
-                                              .withOpacity(0.2), // Màu bóng
-                                          spreadRadius:
-                                              2, // Độ lan tỏa của bóng
-                                          blurRadius: 8, // Độ mờ của bóng
-                                          offset:
-                                              Offset(0, 4), // Dịch chuyển bóng
-                                        ),
-                                      ],
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(
-                                          15), // Bo góc ảnh
-                                      child: Image.network(
-                                        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRo_etEVFHPQdatjflcGiwd6UtnOwPAXL-cRQ&s',
-                                        height: 150,
-                                        width: 250,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ),
-                                  const Positioned(
-                                    bottom: 80, // Căn chữ gần sát đáy ảnh
-                                    left: 5, // Căn lề trái
-                                    child: Text(
-                                      "Thịt Kho Tàu",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors
-                                            .white70, // Chữ màu trắng để nổi bật
-                                        shadows: [
-                                          Shadow(
-                                            blurRadius: 10.0, // Đổ bóng cho chữ
-                                            color: Colors.black,
-                                            offset: Offset(2, 2),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            GridTile(
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius:
-                                          BorderRadius.circular(15), // Bo góc
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black
-                                              .withOpacity(0.2), // Màu bóng
-                                          spreadRadius:
-                                              2, // Độ lan tỏa của bóng
-                                          blurRadius: 8, // Độ mờ của bóng
-                                          offset:
-                                              Offset(0, 4), // Dịch chuyển bóng
-                                        ),
-                                      ],
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(
-                                          15), // Bo góc ảnh
-                                      child: Image.network(
-                                        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRo_etEVFHPQdatjflcGiwd6UtnOwPAXL-cRQ&s',
-                                        height: 150,
-                                        width: 250,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ),
-                                  const Positioned(
-                                    bottom: 80, // Căn chữ gần sát đáy ảnh
-                                    left: 5, // Căn lề trái
-                                    child: Text(
-                                      "Thịt Kho Tàu",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors
-                                            .white70, // Chữ màu trắng để nổi bật
-                                        shadows: [
-                                          Shadow(
-                                            blurRadius: 10.0, // Đổ bóng cho chữ
-                                            color: Colors.black,
-                                            offset: Offset(2, 2),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            GridTile(
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius:
-                                          BorderRadius.circular(15), // Bo góc
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black
-                                              .withOpacity(0.2), // Màu bóng
-                                          spreadRadius:
-                                              2, // Độ lan tỏa của bóng
-                                          blurRadius: 8, // Độ mờ của bóng
-                                          offset:
-                                              Offset(0, 4), // Dịch chuyển bóng
-                                        ),
-                                      ],
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(
-                                          15), // Bo góc ảnh
-                                      child: Image.network(
-                                        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRo_etEVFHPQdatjflcGiwd6UtnOwPAXL-cRQ&s',
-                                        height: 150,
-                                        width: 250,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ),
-                                  const Positioned(
-                                    bottom: 80, // Căn chữ gần sát đáy ảnh
-                                    left: 5, // Căn lề trái
-                                    child: Text(
-                                      "Thịt Kho Tàu",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors
-                                            .white70, // Chữ màu trắng để nổi bật
-                                        shadows: [
-                                          Shadow(
-                                            blurRadius: 10.0, // Đổ bóng cho chữ
-                                            color: Colors.black,
-                                            offset: Offset(2, 2),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            GridTile(
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius:
-                                          BorderRadius.circular(15), // Bo góc
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black
-                                              .withOpacity(0.2), // Màu bóng
-                                          spreadRadius:
-                                              2, // Độ lan tỏa của bóng
-                                          blurRadius: 8, // Độ mờ của bóng
-                                          offset:
-                                              Offset(0, 4), // Dịch chuyển bóng
-                                        ),
-                                      ],
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(
-                                          15), // Bo góc ảnh
-                                      child: Image.network(
-                                        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRo_etEVFHPQdatjflcGiwd6UtnOwPAXL-cRQ&s',
-                                        height: 150,
-                                        width: 250,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ),
-                                  const Positioned(
-                                    bottom: 80, // Căn chữ gần sát đáy ảnh
-                                    left: 5, // Căn lề trái
-                                    child: Text(
-                                      "Thịt Kho Tàu",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors
-                                            .white70, // Chữ màu trắng để nổi bật
-                                        shadows: [
-                                          Shadow(
-                                            blurRadius: 10.0, // Đổ bóng cho chữ
-                                            color: Colors.black,
-                                            offset: Offset(2, 2),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            GridTile(
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius:
-                                          BorderRadius.circular(15), // Bo góc
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black
-                                              .withOpacity(0.2), // Màu bóng
-                                          spreadRadius:
-                                              2, // Độ lan tỏa của bóng
-                                          blurRadius: 8, // Độ mờ của bóng
-                                          offset:
-                                              Offset(0, 4), // Dịch chuyển bóng
-                                        ),
-                                      ],
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(
-                                          15), // Bo góc ảnh
-                                      child: Image.network(
-                                        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRo_etEVFHPQdatjflcGiwd6UtnOwPAXL-cRQ&s',
-                                        height: 150,
-                                        width: 250,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ),
-                                  const Positioned(
-                                    bottom: 80, // Căn chữ gần sát đáy ảnh
-                                    left: 5, // Căn lề trái
-                                    child: Text(
-                                      "Thịt Kho Tàu",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors
-                                            .white70, // Chữ màu trắng để nổi bật
-                                        shadows: [
-                                          Shadow(
-                                            blurRadius: 10.0, // Đổ bóng cho chữ
-                                            color: Colors.black,
-                                            offset: Offset(2, 2),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            GridTile(
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius:
-                                          BorderRadius.circular(15), // Bo góc
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black
-                                              .withOpacity(0.2), // Màu bóng
-                                          spreadRadius:
-                                              2, // Độ lan tỏa của bóng
-                                          blurRadius: 8, // Độ mờ của bóng
-                                          offset:
-                                              Offset(0, 4), // Dịch chuyển bóng
-                                        ),
-                                      ],
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(
-                                          15), // Bo góc ảnh
-                                      child: Image.network(
-                                        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRo_etEVFHPQdatjflcGiwd6UtnOwPAXL-cRQ&s',
-                                        height: 150,
-                                        width: 250,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ),
-                                  const Positioned(
-                                    bottom: 80, // Căn chữ gần sát đáy ảnh
-                                    left: 5, // Căn lề trái
-                                    child: Text(
-                                      "Thịt Kho Tàu",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors
-                                            .white70, // Chữ màu trắng để nổi bật
-                                        shadows: [
-                                          Shadow(
-                                            blurRadius: 10.0, // Đổ bóng cho chữ
-                                            color: Colors.black,
-                                            offset: Offset(2, 2),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                            );
+                          },
                         ),
                       ),
                     ],
@@ -670,20 +296,15 @@ class _HomePagesState extends State<HomePages> {
         elevation: 0,
         onTap: (index) {
           if (index == 0) {
-            // Nếu bấm vào home, chuyển đến WelcomePage
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => HomePages()),
             );
           } else if (index == 1) {
-            // Nếu bấm vào person, chuyển đến HomePage
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => SeeDetailsFood()),
             );
-          } else {
-            // Các trang khác
-            _onItemTapped(index);
           }
         },
         items: const [
